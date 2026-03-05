@@ -1,0 +1,47 @@
+name: Build (Dispatched)
+
+on:
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: 'Build configuration (Release or Debug)'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+          - Release
+          - Debug
+      platform:
+        description: 'Target platform'
+        required: true
+        default: 'Windows64'
+        type: string
+
+jobs:
+  build:
+    name: Build ${{ inputs.platform }} (${{ inputs.configuration }})
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build MinecraftConsoles
+        run: |
+          msbuild Clone/MinecraftConsoles.sln `
+            /p:Configuration=${{ inputs.configuration }} `
+            /p:Platform=${{ inputs.platform }} `
+            /m
+
+      - name: Zip build output
+        if: inputs.configuration == 'Release'
+        run: 7z a -r LCEWindows64.zip ./Clone/x64/Release/*
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MinecraftClient-${{ inputs.platform }}-${{ inputs.configuration }}
+          path: Clone/x64/${{ inputs.configuration }}

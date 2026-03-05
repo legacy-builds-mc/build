@@ -1,0 +1,58 @@
+name: Clone and Trigger Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: 'Build configuration'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+          - Release
+          - Debug
+      platform:
+        description: 'Target platform'
+        required: true
+        default: 'Windows64'
+        type: string
+
+jobs:
+  clone-and-push:
+    name: Clone MinecraftConsoles and Push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout current repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clone MinecraftConsoles into Clone/
+        run: |
+          git clone https://github.com/smartcmd/MinecraftConsoles.git Clone/
+
+      - name: Commit and push cloned content
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Clone/
+          git diff --cached --quiet || git commit -m "chore: sync MinecraftConsoles clone [skip ci]"
+          git push
+
+      - name: Trigger build workflow
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              workflow_id: 'build-dispatch.yml',
+              ref: 'main',
+              inputs: {
+                configuration: '${{ inputs.configuration }}',
+                platform:      '${{ inputs.platform }}'
+              }
+            });
+            console.log('Build workflow triggered successfully.');
