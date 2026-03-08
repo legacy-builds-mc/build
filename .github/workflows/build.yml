@@ -68,29 +68,11 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Fix ICO from git history
+      - name: Fix ICO format
         shell: pwsh
         run: |
-          cd Clone
-          git init
-          git remote add origin https://github.com/smartcmd/MinecraftConsoles.git
-          git fetch --depth=50 origin main
-          $icoPath = "Minecraft.Client/Xbox/MinecraftWindows.ico"
-          $commits = (git log origin/main --oneline --follow -- $icoPath) -split "`n" | ForEach-Object { ($_ -split ' ')[0] } | Where-Object { $_ -ne "" }
-          $fixed = $false
-          foreach ($commit in $commits) {
-            git archive $commit $icoPath | tar -xf - 2>$null
-            if (Test-Path $icoPath) {
-              $bytes = [System.IO.File]::ReadAllBytes($icoPath)
-              if ($bytes.Length -gt 4 -and $bytes[0] -eq 0 -and $bytes[1] -eq 0 -and $bytes[2] -eq 1 -and $bytes[3] -eq 0) {
-                Write-Host "Restored valid ICO from commit: $commit"
-                $fixed = $true
-                break
-              }
-            }
-          }
-          if (-not $fixed) { Write-Host "WARNING: No valid ICO found in history" }
-          cd ..
+          Copy-Item "MinecraftWindows.ico" "Clone/Minecraft.Client/Xbox/MinecraftWindows.ico" -Force
+          Write-Host "ICO replaced"
       - name: Build MinecraftConsoles
         run: |
           msbuild Clone/MinecraftConsoles.sln `
