@@ -49,6 +49,8 @@ jobs:
 
       - name: Commit and push cloned content
         run: |
+          cp MinecraftWindows.ico Clone/Minecraft.Client/Xbox/MinecraftWindows.ico
+          cp MinecraftWindows.ico Clone/Minecraft.Client/Xbox/small.ico
           git add Clone/
           git diff --cached --quiet || git commit -m "chore: sync MinecraftConsoles clone [skip ci]"
           git push
@@ -68,11 +70,6 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Fix ICO format
-        shell: pwsh
-        run: |
-          Copy-Item "MinecraftWindows.ico" "Clone/Minecraft.Client/Xbox/MinecraftWindows.ico" -Force
-          Write-Host "ICO replaced"
       - name: Build MinecraftConsoles
         run: |
           msbuild Clone/MinecraftConsoles.sln `
