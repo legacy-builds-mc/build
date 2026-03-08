@@ -1,0 +1,144 @@
+name: Clone, Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: 'Build configuration'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+          - Release
+          - Debug
+      platform:
+        description: 'Target platform'
+        required: true
+        default: 'Windows64'
+        type: string
+
+jobs:
+  # ─── JOB 1: Clone ───────────────────────────────────────────────
+  clone:
+    name: Clone MinecraftConsoles
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout current repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clone MinecraftConsoles into Clone/
+        run: |
+          git clone https://github.com/smartcmd/MinecraftConsoles.git Clone/
+          rm -rf Clone/.git
+
+      - name: Commit and push cloned content
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Clone/
+          git diff --cached --quiet || git commit -m "chore: sync MinecraftConsoles clone [skip ci]"
+          git push
+
+  # ─── JOB 2: Build ───────────────────────────────────────────────
+  build:
+    name: Build ${{ inputs.platform }} (${{ inputs.configuration }})
+    runs-on: windows-2022
+    needs: clone
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Fix ICO from git history
+        shell: pwsh
+        run: |
+          cd Clone
+          git init
+          git remote add origin https://github.com/smartcmd/MinecraftConsoles.git
+          git fetch --depth=50 origin main
+          $icoPath = "Minecraft.Client/Xbox/MinecraftWindows.ico"
+          $commits = git log origin/main --oneline --follow -- $icoPath | ForEach-Object { $_.Split(' ')[0] }
+          $fixed = $false
+          foreach ($commit in $commits) {
+            $tmp = "../fixed.ico"
+            git show "${commit}:${icoPath}" | Set-Content $tmp -Encoding Byte
+            $bytes = [System.IO.File]::ReadAllBytes($tmp)
+            if ($bytes.Length -gt 4 -and $bytes[0] -eq 0 -and $bytes[1] -eq 0 -and $bytes[2] -eq 1 -and $bytes[3] -eq 0) {
+              Copy-Item $tmp $icoPath -Force
+              Write-Host "Restored valid ICO from commit: $commit"
+              $fixed = $true
+              break
+            }
+          }
+          if (-not $fixed) { Write-Host "WARNING: No valid ICO found in history" }
+          cd ..
+
+      - name: Build MinecraftConsoles
+        run: |
+          msbuild Clone/MinecraftConsoles.sln `
+            /p:Configuration=${{ inputs.configuration }} `
+            /p:Platform=${{ inputs.platform }} `
+            /m
+
+      - name: Zip build output
+        if: inputs.configuration == 'Release'
+        run: 7z a -r LCEWindows64.zip ./Clone/x64/Release/*
+
+      - name: Upload artifact for release job
+        if: inputs.configuration == 'Release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: |
+            LCEWindows64.zip
+            Clone/x64/Release/Minecraft.Client.exe
+            Clone/x64/Release/Minecraft.Client.pdb
+
+      - name: Upload artifact (Debug)
+        if: inputs.configuration == 'Debug'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output-debug
+          path: Clone/x64/Debug/
+
+  # ─── JOB 3: Release ─────────────────────────────────────────────
+  release:
+    name: Publish Nightly Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: inputs.configuration == 'Release'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output
+          path: artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: Nightly Release
+          prerelease: true
+          body: |
+            Requires at least Windows 7 and DirectX 11 compatible GPU to run.
+            Compiled with MSVC v14.44.35207 in Release mode with `/O2 /Ot /Oi /Ob3 /GF /fp:precise`.
+          files: |
+            artifacts/LCEWindows64.zip
+            artifacts/Minecraft.Client.exe
+            artifacts/Minecraft.Client.pdb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
