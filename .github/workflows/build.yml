@@ -31,6 +31,17 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Configure git
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Delete Clone/ and commit
+        run: |
+          git rm -rf Clone/ --ignore-unmatch
+          git diff --cached --quiet || git commit -m "chore: clear Clone/ [skip ci]"
+          git push
+
       - name: Clone MinecraftConsoles into Clone/
         run: |
           git clone https://github.com/smartcmd/MinecraftConsoles.git Clone/
@@ -38,8 +49,6 @@ jobs:
 
       - name: Commit and push cloned content
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Clone/
           git diff --cached --quiet || git commit -m "chore: sync MinecraftConsoles clone [skip ci]"
           git push
