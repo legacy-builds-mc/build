@@ -29,6 +29,18 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      - name: Fix ICO format
+        run: |
+          pip install pillow
+          python -c "
+    from PIL import Image
+    path = 'Clone/Minecraft.Client/Xbox/MinecraftWindows.ico'
+    img = Image.open(path)
+    img.save(path, format='ICO')
+    print('ICO fixed successfully')
+          "
+        shell: pwsh
+
       - name: Build MinecraftConsoles
         run: |
           msbuild Clone/MinecraftConsoles.sln `
